@@ -1,0 +1,26 @@
+{
+  "name": "academic-document-processor",
+  "version": "1.0.0",
+  "description": "Desktop app for academic document processing with Python & Electron",
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "postinstall": "cd frontend && npm install",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:electron && npm run build:frontend",
+    "dev:backend": "backend/.venv/bin/python backend/run.py",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "concurrently -k -n \"FRONTEND,ELECTRON\" -c \"green,magenta\" \"npm run dev:frontend\" \"wait-on tcp:5173 && npm run build:electron && electron .\"",
+    "start": "npm run build:electron && electron ."
+  },
+  "keywords": ["academic", "document-processor", "electron", "fastapi", "openrouter"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^29.1.5",
+    "typescript": "^5.4.2",
+    "wait-on": "^7.2.0"
+  }
+}
