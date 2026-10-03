@@ -25,12 +25,12 @@ import {
 } from "lucide-react";
 import { isYouTubeUrl } from "./UrlInputBar";
 import { InstructionPreset } from "../types";
-import { fetchPresets, createPreset, deletePreset } from "../services/api";
+import { useDocumentStore, usePresetStore, useQueueStore } from "../stores";
 
 interface ActionGridProps {
-  documentCount: number;
+  documentCount?: number;
   urlInput?: string;
-  onTriggerAction: (actionType: string, customInstructions?: string) => void;
+  onTriggerAction?: (actionType: string, customInstructions?: string) => void;
 }
 
 interface ActionDef {
@@ -46,19 +46,28 @@ interface ActionDef {
   targetType?: "document" | "link";
 }
 
-export const ActionGrid: React.FC<ActionGridProps> = ({
-  documentCount,
-  urlInput,
-  onTriggerAction,
-}) => {
+export const ActionGrid: React.FC<ActionGridProps> = (props) => {
+  const storeDocCount = useDocumentStore((s) => s.selectedPaths.length);
+  const storeUrlInput = useDocumentStore((s) => s.urlInput);
+  const storeTriggerAction = useQueueStore((s) => s.triggerAction);
+
+  const documentCount = props.documentCount !== undefined ? props.documentCount : storeDocCount;
+  const urlInput = props.urlInput !== undefined ? props.urlInput : storeUrlInput;
+  const onTriggerAction = props.onTriggerAction ?? storeTriggerAction;
+
+  const presets = usePresetStore((s) => s.presets);
+  const selectedPresetId = usePresetStore((s) => s.selectedPresetId);
+  const loadPresets = usePresetStore((s) => s.loadPresets);
+  const selectPreset = usePresetStore((s) => s.selectPreset);
+  const addPreset = usePresetStore((s) => s.addPreset);
+  const removePreset = usePresetStore((s) => s.removePreset);
+
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [customInstructions, setCustomInstructions] = useState<string>("");
   const [isCooldown, setIsCooldown] = useState<boolean>(false);
   const cooldownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Presets state
-  const [presets, setPresets] = useState<InstructionPreset[]>([]);
-  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  // Presets local UI state
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [showSavePresetModal, setShowSavePresetModal] = useState<boolean>(false);
   const [saveTitle, setSaveTitle] = useState<string>("");
@@ -66,10 +75,8 @@ export const ActionGrid: React.FC<ActionGridProps> = ({
 
   // Fetch presets on mount
   useEffect(() => {
-    fetchPresets()
-      .then((data) => setPresets(data))
-      .catch((err) => console.error("Could not load presets:", err));
-  }, []);
+    loadPresets();
+  }, [loadPresets]);
 
   // Handle outside click:
   // - Dropdown only appears when the text field is clicked
@@ -99,9 +106,7 @@ export const ActionGrid: React.FC<ActionGridProps> = ({
     if (!saveTitle.trim() || !customInstructions.trim()) return;
 
     try {
-      const created = await createPreset(saveTitle.trim(), customInstructions.trim());
-      setPresets((prev) => [...prev, created]);
-      setSelectedPresetId(created.id);
+      await addPreset(saveTitle.trim(), customInstructions.trim());
       setIsDropdownOpen(true);
       setShowSavePresetModal(false);
     } catch (err: any) {
@@ -113,11 +118,7 @@ export const ActionGrid: React.FC<ActionGridProps> = ({
     e.stopPropagation();
     if (!confirm("Are you sure you want to delete this preset?")) return;
     try {
-      await deletePreset(presetId);
-      setPresets((prev) => prev.filter((p) => p.id !== presetId));
-      if (selectedPresetId === presetId) {
-        setSelectedPresetId(null);
-      }
+      await removePreset(presetId);
     } catch (err: any) {
       alert(`Could not delete preset: ${err.message || String(err)}`);
     }
@@ -125,11 +126,11 @@ export const ActionGrid: React.FC<ActionGridProps> = ({
 
   const handleSelectPreset = (preset: InstructionPreset) => {
     if (selectedPresetId === preset.id) {
-      setSelectedPresetId(null);
+      selectPreset(null);
       setCustomInstructions("");
     } else {
       setCustomInstructions(preset.instructions);
-      setSelectedPresetId(preset.id);
+      selectPreset(preset.id);
       setIsDropdownOpen(true);
     }
   };
@@ -507,7 +508,7 @@ export const ActionGrid: React.FC<ActionGridProps> = ({
                       setCustomInstructions(val);
                       const matching = presets.find((p) => p.id === selectedPresetId);
                       if (matching && matching.instructions !== val) {
-                        setSelectedPresetId(null);
+                        selectPreset(null);
                       }
                     }}
                     onKeyDown={(e) => {
@@ -537,7 +538,7 @@ export const ActionGrid: React.FC<ActionGridProps> = ({
                           type="button"
                           onClick={() => {
                             setCustomInstructions("");
-                            setSelectedPresetId(null);
+                            selectPreset(null);
                           }}
                           className="text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 px-1 cursor-pointer"
                           title="Clear custom instructions"

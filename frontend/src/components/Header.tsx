@@ -1,23 +1,32 @@
+import React from "react";
 import { GraduationCap, Settings as SettingsIcon } from "lucide-react";
+import { useSettingsStore } from "../stores";
 import { AppSettings } from "../types";
 
 interface HeaderProps {
-  backendConnected: boolean;
-  settings: AppSettings | null;
-  onOpenSettings: () => void;
+  backendConnected?: boolean;
+  settings?: AppSettings | null;
+  onOpenSettings?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-  backendConnected,
-  settings,
-  onOpenSettings,
-}) => {
+export const Header: React.FC<HeaderProps> = (props) => {
+  const storeConnected = useSettingsStore((s) => s.backendConnected);
+  const storeSettings = useSettingsStore((s) => s.settings);
+  const storeOpenSettings = useSettingsStore((s) => s.openSettings);
+
+  const backendConnected = props.backendConnected ?? storeConnected;
+  const settings = props.settings !== undefined ? props.settings : storeSettings;
+  const onOpenSettings = props.onOpenSettings ?? storeOpenSettings;
+
   const needsApiKey = settings && !settings.has_api_key;
 
   return (
-    <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-3.5 flex items-center justify-between shadow-sm select-none">
-      <div className="flex items-center space-x-3">
-        <div className="w-10 h-10 rounded-xl bg-brand-500/10 dark:bg-brand-500/20 text-brand-600 dark:text-brand-400 flex items-center justify-center font-bold shadow-inner">
+    <header
+      className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-3.5 flex items-center justify-between shadow-sm select-none shrink-0"
+      style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+    >
+      <div className="flex items-center space-x-3 pl-16">
+        <div className="w-10 h-10 rounded-xl bg-brand-500/10 dark:bg-brand-500/20 text-brand-600 dark:text-brand-400 flex items-center justify-center font-bold shadow-inner shrink-0">
           <GraduationCap className="w-6 h-6" />
         </div>
         <div>
@@ -30,7 +39,10 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center space-x-3">
+      <div
+        className="flex items-center space-x-3 shrink-0"
+        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+      >
         {/* Backend Connection Pill */}
         <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
           <span
@@ -53,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Settings Button */}
         <button
           onClick={onOpenSettings}
-          className="relative p-2 rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
+          className="relative p-2 rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
           title="App Settings"
         >
           <SettingsIcon className="w-5 h-5" />

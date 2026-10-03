@@ -13,38 +13,55 @@ import {
   Trash2,
   RotateCcw,
 } from "lucide-react";
-import { AppSettings, InstructionPreset } from "../types";
-import { fetchPresets, createPreset, deletePreset, resetPresets } from "../services/api";
+import { AppSettings } from "../types";
+import { useSettingsStore, usePresetStore } from "../stores";
 
 interface SettingsModalProps {
-  isOpen: boolean;
-  settings: AppSettings | null;
-  onClose: () => void;
-  onSave: (data: {
+  isOpen?: boolean;
+  settings?: AppSettings | null;
+  onClose?: () => void;
+  onSave?: (data: {
     apiKey?: string;
     model: string;
     defaultOutputDir: string;
   }) => Promise<void>;
-  onSelectFolder: () => Promise<string | null>;
+  onSelectFolder?: () => Promise<string | null>;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({
-  isOpen,
-  settings,
-  onClose,
-  onSave,
-  onSelectFolder,
-}) => {
+export const SettingsModal: React.FC<SettingsModalProps> = (props) => {
+  const storeIsOpen = useSettingsStore((s) => s.isSettingsOpen);
+  const storeSettings = useSettingsStore((s) => s.settings);
+  const storeClose = useSettingsStore((s) => s.closeSettings);
+  const storeSave = useSettingsStore((s) => s.saveSettings);
+
+  const presets = usePresetStore((s) => s.presets);
+  const loadPresets = usePresetStore((s) => s.loadPresets);
+  const addPreset = usePresetStore((s) => s.addPreset);
+  const removePreset = usePresetStore((s) => s.removePreset);
+  const resetDefaults = usePresetStore((s) => s.resetDefaults);
+
+  const isOpen = props.isOpen !== undefined ? props.isOpen : storeIsOpen;
+  const settings = props.settings !== undefined ? props.settings : storeSettings;
+  const onClose = props.onClose ?? storeClose;
+  const onSave = props.onSave ?? storeSave;
+  const onSelectFolder = props.onSelectFolder ?? (async () => {
+    if (window.electronAPI?.selectOutputFolder) {
+      return await window.electronAPI.selectOutputFolder();
+    }
+    return null;
+  });
+
   const [activeTab, setActiveTab] = useState<"general" | "presets">("general");
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(settings?.selected_model || "nvidia/nemotron-3-ultra-550b-a55b:free");
+  const [selectedModel, setSelectedModel] = useState(
+    settings?.selected_model || "nvidia/nemotron-3-ultra-550b-a55b:free"
+  );
   const [outputDir, setOutputDir] = useState(settings?.default_output_dir || "");
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Preset management state
-  const [presets, setPresets] = useState<InstructionPreset[]>([]);
+  // Preset management form state
   const [isAddingPreset, setIsAddingPreset] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newInstructions, setNewInstructions] = useState("");
@@ -63,9 +80,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         });
       }
       // Load presets
-      fetchPresets().then(setPresets).catch(console.error);
+      loadPresets();
     }
-  }, [isOpen, settings]);
+  }, [isOpen, settings, loadPresets]);
 
   if (!isOpen) return null;
 
@@ -110,8 +127,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (!newTitle.trim() || !newInstructions.trim()) return;
     setPresetSaving(true);
     try {
-      const created = await createPreset(newTitle.trim(), newInstructions.trim());
-      setPresets((prev) => [...prev, created]);
+      await addPreset(newTitle.trim(), newInstructions.trim());
       setNewTitle("");
       setNewInstructions("");
       setIsAddingPreset(false);
@@ -125,8 +141,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleDeletePreset = async (id: string) => {
     if (!confirm("Are you sure you want to delete this custom preset?")) return;
     try {
-      await deletePreset(id);
-      setPresets((prev) => prev.filter((p) => p.id !== id));
+      await removePreset(id);
     } catch (err: any) {
       alert(`Failed to delete preset: ${err.message || String(err)}`);
     }
@@ -135,8 +150,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleResetPresets = async () => {
     if (!confirm("Restore default academic presets? This will remove custom presets.")) return;
     try {
-      const defaults = await resetPresets();
-      setPresets(defaults);
+      await resetDefaults();
     } catch (err: any) {
       alert(`Failed to reset presets: ${err.message || String(err)}`);
     }

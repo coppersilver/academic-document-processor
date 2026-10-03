@@ -14,11 +14,12 @@ import {
   Eye,
 } from "lucide-react";
 import { TaskItem } from "../types";
+import { useQueueStore } from "../stores";
 
 interface QueueListProps {
-  tasks: TaskItem[];
-  onCancelTask: (taskId: string) => void;
-  onRevealFile: (outputPath: string) => void;
+  tasks?: TaskItem[];
+  onCancelTask?: (taskId: string) => void;
+  onRevealFile?: (outputPath: string) => void;
 }
 
 // Live timer component for active tasks
@@ -38,11 +39,14 @@ const LiveTimer: React.FC<{ startTimeIso?: string }> = ({ startTimeIso }) => {
   return <span className="font-mono text-blue-600 dark:text-blue-400 font-semibold">{elapsedSec}s</span>;
 };
 
-export const QueueList: React.FC<QueueListProps> = ({
-  tasks,
-  onCancelTask,
-  onRevealFile,
-}) => {
+export const QueueList: React.FC<QueueListProps> = (props) => {
+  const storeTasks = useQueueStore((s) => s.tasks);
+  const storeCancelTask = useQueueStore((s) => s.cancelTask);
+  const storeRevealFile = useQueueStore((s) => s.revealFile);
+
+  const tasks = props.tasks !== undefined ? props.tasks : storeTasks;
+  const onCancelTask = props.onCancelTask ?? storeCancelTask;
+  const onRevealFile = props.onRevealFile ?? storeRevealFile;
   const getStageDisplay = (task: TaskItem) => {
     if (task.status === "PENDING") {
       return (

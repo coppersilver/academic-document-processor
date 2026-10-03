@@ -1,16 +1,23 @@
 import React from "react";
 import { Globe, X, Link as LinkIcon, Video } from "lucide-react";
+import { useDocumentStore } from "../stores";
 
 interface UrlInputBarProps {
-  url: string;
-  onUrlChange: (url: string) => void;
+  url?: string;
+  onUrlChange?: (url: string) => void;
 }
 
 export const isYouTubeUrl = (url: string): boolean => {
   return /(?:youtube\.com\/(?:watch\?|shorts\/|live\/|embed\/)|youtu\.be\/)/i.test(url.trim());
 };
 
-export const UrlInputBar: React.FC<UrlInputBarProps> = ({ url, onUrlChange }) => {
+export const UrlInputBar: React.FC<UrlInputBarProps> = (props) => {
+  const storeUrl = useDocumentStore((s) => s.urlInput);
+  const storeSetUrl = useDocumentStore((s) => s.setUrlInput);
+
+  const url = props.url !== undefined ? props.url : storeUrl;
+  const onUrlChange = props.onUrlChange ?? storeSetUrl;
+
   const hasUrl = url.trim().length > 0;
   const isYouTube = isYouTubeUrl(url);
 
@@ -57,7 +64,7 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({ url, onUrlChange }) =>
             <button
               type="button"
               onClick={() => onUrlChange("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded transition-colors"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded transition-colors cursor-pointer"
               title="Clear URL and re-enable document actions"
             >
               <X className="w-3.5 h-3.5" />

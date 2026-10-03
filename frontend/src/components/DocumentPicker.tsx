@@ -12,27 +12,36 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { useDocumentStore } from "../stores";
 import { InspectResult } from "../types";
 
 interface DocumentPickerProps {
-  selectedPaths: string[];
-  inspectData: InspectResult | null;
-  inspecting: boolean;
-  onSelectDocuments: () => void;
-  onRemoveDocument: (path: string) => void;
-  onClearAll: () => void;
-  onFilesDropped: (paths: string[]) => void;
+  selectedPaths?: string[];
+  inspectData?: InspectResult | null;
+  inspecting?: boolean;
+  onSelectDocuments?: () => void;
+  onRemoveDocument?: (path: string) => void;
+  onClearAll?: () => void;
+  onFilesDropped?: (paths: string[]) => void;
 }
 
-export const DocumentPicker: React.FC<DocumentPickerProps> = ({
-  selectedPaths,
-  inspectData,
-  inspecting,
-  onSelectDocuments,
-  onRemoveDocument,
-  onClearAll,
-  onFilesDropped,
-}) => {
+export const DocumentPicker: React.FC<DocumentPickerProps> = (props) => {
+  const storeSelectedPaths = useDocumentStore((s) => s.selectedPaths);
+  const storeInspectData = useDocumentStore((s) => s.inspectData);
+  const storeInspecting = useDocumentStore((s) => s.inspecting);
+  const storeSelectDocuments = useDocumentStore((s) => s.selectDocuments);
+  const storeRemoveDocument = useDocumentStore((s) => s.removeDocument);
+  const storeClearAll = useDocumentStore((s) => s.clearAllDocuments);
+  const storeAddDocuments = useDocumentStore((s) => s.addDocuments);
+
+  const selectedPaths = props.selectedPaths !== undefined ? props.selectedPaths : storeSelectedPaths;
+  const inspectData = props.inspectData !== undefined ? props.inspectData : storeInspectData;
+  const inspecting = props.inspecting !== undefined ? props.inspecting : storeInspecting;
+  const onSelectDocuments = props.onSelectDocuments ?? storeSelectDocuments;
+  const onRemoveDocument = props.onRemoveDocument ?? storeRemoveDocument;
+  const onClearAll = props.onClearAll ?? storeClearAll;
+  const onFilesDropped = props.onFilesDropped ?? storeAddDocuments;
+
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -143,7 +152,7 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
         {hasFiles && (
           <button
             onClick={onSelectDocuments}
-            className="flex items-center space-x-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 transition-colors"
+            className="flex items-center space-x-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add more</span>
@@ -156,7 +165,7 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
         <div className="flex items-center justify-between pt-1 text-xs">
           <button
             onClick={onClearAll}
-            className="flex items-center space-x-1 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors py-0.5 font-medium"
+            className="flex items-center space-x-1 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors py-0.5 font-medium cursor-pointer"
             title="Remove all selected documents"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -225,7 +234,7 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
                       e.stopPropagation();
                       onRemoveDocument(fp);
                     }}
-                    className="text-slate-400 hover:text-rose-500 rounded p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                    className="text-slate-400 hover:text-rose-500 rounded p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
