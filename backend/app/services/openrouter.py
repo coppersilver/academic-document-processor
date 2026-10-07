@@ -12,6 +12,7 @@ from ..prompts.bibtex import build_bibtex_prompt
 from ..prompts.practice_exam import build_practice_exam_prompt
 from ..prompts.anonymize import build_anonymize_prompt
 from ..prompts.polish import build_polish_prompt
+from ..prompts.syllabus_strategy import build_syllabus_strategy_prompt
 
 logger = logging.getLogger("academic_processor.openrouter")
 
@@ -73,10 +74,58 @@ async def call_openrouter(
 
                 if response.status_code == 200:
                     data = response.json()
+
+                    # Check if OpenRouter embedded an error in a 200 OK response
+                    if "error" in data:
+                        err_obj = data["error"]
+                        if isinstance(err_obj, dict):
+                            err_msg = err_obj.get("message") or str(err_obj)
+                            err_code = err_obj.get("code", "")
+                        else:
+                            err_msg = str(err_obj)
+                            err_code = ""
+
+                        logger.warning(
+                            f"OpenRouter returned 200 OK with embedded error (attempt {attempt}/{max_retries}): {err_msg} (code: {err_code})"
+                        )
+                        # Embedded 200 errors are typically transient upstream provider failures or rate limits; retry
+                        delay = (2 ** attempt) + random.uniform(0.5, 1.5)
+                        if attempt == max_retries:
+                            raise OpenRouterError(f"OpenRouter upstream provider error: {err_msg}", is_terminal=False)
+                        await asyncio.sleep(delay)
+                        continue
+
                     choices = data.get("choices", [])
-                    if choices and "message" in choices[0]:
-                        return choices[0]["message"].get("content", "")
-                    raise OpenRouterError("Unexpected API response structure with no choices.", is_terminal=True)
+                    if choices and len(choices) > 0:
+                        choice = choices[0]
+                        # Check choice-level error or finish_reason
+                        if choice.get("finish_reason") == "error":
+                            error_info = choice.get("error", {})
+                            msg = error_info.get("message", "Upstream provider error during completion") if isinstance(error_info, dict) else str(error_info)
+                            logger.warning(f"OpenRouter choice finish_reason=error: {msg} (attempt {attempt}/{max_retries})")
+                            delay = (2 ** attempt) + random.uniform(0.5, 1.5)
+                            if attempt == max_retries:
+                                raise OpenRouterError(f"Model generation error: {msg}", is_terminal=False)
+                            await asyncio.sleep(delay)
+                            continue
+
+                        if "message" in choice:
+                            content = choice["message"].get("content")
+                            if content is not None:
+                                return content
+
+                    # Empty choices or choices without content
+                    logger.warning(
+                        f"OpenRouter returned 200 OK but choices is empty or missing content (attempt {attempt}/{max_retries}). Raw response: {str(data)[:300]}"
+                    )
+                    delay = (2 ** attempt) + random.uniform(0.5, 1.5)
+                    if attempt == max_retries:
+                        raise OpenRouterError(
+                            "OpenRouter model returned an empty response with no choices after retries. The upstream provider may be temporarily busy or rate-limited. Try selecting a different model in Settings or retrying in a moment.",
+                            is_terminal=False
+                        )
+                    await asyncio.sleep(delay)
+                    continue
 
                 status = response.status_code
                 error_body = response.text
@@ -168,6 +217,8 @@ def get_action_messages(
         messages = build_anonymize_prompt(document_text, filenames[0] if filenames else "Document")
     elif action == "polish":
         messages = build_polish_prompt(document_text, filenames[0] if filenames else "Document")
+    elif action == "syllabus_strategy":
+        messages = build_syllabus_strategy_prompt(document_text, filenames[0] if filenames else "Syllabus")
     else:
         raise ValueError(f"Unsupported action type: {action_type}")
 

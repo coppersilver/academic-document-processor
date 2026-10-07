@@ -295,7 +295,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = (props) => {
                   type="text"
                   value={outputDir}
                   onChange={(e) => setOutputDir(e.target.value)}
-                  placeholder="Leave blank for outputs/ folder next to source file"
+                  placeholder="e.g. ~/Documents/AcademicProcessorOutputs"
                   className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
                 <button

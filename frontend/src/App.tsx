@@ -28,8 +28,11 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     if (!isPreview) {
-      initBackend();
-      initQueue();
+      const initialize = async () => {
+        await initBackend();
+        await initQueue();
+      };
+      initialize();
     }
     return () => {
       cleanupSSE();

@@ -37,9 +37,19 @@ AVAILABLE_MODELS = [
     {"id": "deepseek/deepseek-v4.1-flash", "name": "DeepSeek V4.1 Flash"},
 ]
 
+DEFAULT_OUTPUT_DIR = str(Path.home() / "Documents" / "AcademicProcessorOutputs")
+try:
+    Path(DEFAULT_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+except (PermissionError, OSError):
+    pass
+
 class AppSettings(BaseModel):
     openrouter_api_key: str = Field(default="", description="OpenRouter API Key")
     selected_model: str = Field(default=DEFAULT_MODEL, description="Active OpenRouter Model ID")
-    default_output_dir: str = Field(default="", description="Global output directory (empty for adjacent outputs/)")
+    default_output_dir: str = Field(
+        default=DEFAULT_OUTPUT_DIR,
+        description="Global output directory (defaults to ~/Documents/AcademicProcessorOutputs)"
+    )
 
 settings = AppSettings()
+

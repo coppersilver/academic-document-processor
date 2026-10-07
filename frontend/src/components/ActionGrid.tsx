@@ -22,6 +22,7 @@ import {
   Trash2,
   Check,
   X,
+  Compass,
 } from "lucide-react";
 import { isYouTubeUrl } from "./UrlInputBar";
 import { InstructionPreset } from "../types";
@@ -168,6 +169,17 @@ export const ActionGrid: React.FC<ActionGridProps> = (props) => {
       icon: <Calendar className="w-5 h-5" />,
       accentBg: "bg-amber-500/10 dark:bg-amber-500/20",
       accentText: "text-amber-600 dark:text-amber-400",
+      isSingleDocOnly: true,
+      requiresCloudLLM: true,
+      targetType: "document",
+    },
+    {
+      id: "syllabus_strategy",
+      title: "Course Strategy Guide",
+      description: "Analyze course syllabi to construct a master guide for deep conceptual comprehension and optimal grades.",
+      icon: <Compass className="w-5 h-5" />,
+      accentBg: "bg-orange-500/10 dark:bg-orange-500/20",
+      accentText: "text-orange-600 dark:text-orange-400",
       isSingleDocOnly: true,
       requiresCloudLLM: true,
       targetType: "document",

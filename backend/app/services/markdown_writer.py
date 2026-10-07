@@ -2,6 +2,8 @@ import re
 from pathlib import Path
 from datetime import datetime, timezone
 
+from ..config import settings
+
 ACTION_DISPLAY_NAMES = {
     "summary": "Document Summary",
     "deadlines": "Dates and Deadlines",
@@ -11,6 +13,8 @@ ACTION_DISPLAY_NAMES = {
     "bibtex": "BibTeX Citations & Bibliography",
     "practice_exam": "Academic Practice Exam",
     "anonymize": "Anonymized Document",
+    "polish": "Polished Academic Document",
+    "syllabus_strategy": "Course Strategy Guide",
 }
 
 def sanitize_filename(name: str) -> str:
@@ -29,6 +33,8 @@ def write_markdown_output(
     # Determine destination directory
     if target_output_dir and target_output_dir.strip():
         out_dir = Path(target_output_dir.strip())
+    elif settings.default_output_dir and settings.default_output_dir.strip():
+        out_dir = Path(settings.default_output_dir.strip())
     elif source_file_paths and len(source_file_paths) > 0:
         first_source = Path(source_file_paths[0])
         out_dir = first_source.parent / "outputs"
@@ -36,6 +42,7 @@ def write_markdown_output(
         out_dir = Path.home() / "Documents" / "AcademicProcessorOutputs"
 
     out_dir.mkdir(parents=True, exist_ok=True)
+
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     now_human = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")

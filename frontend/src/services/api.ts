@@ -2,6 +2,7 @@ import { AppSettings, InspectResult, TaskItem, InstructionPreset } from "../type
 
 let backendBaseUrl = "http://127.0.0.1:8765";
 let sessionToken = "";
+let backendInitPromise: Promise<string> | null = null;
 
 declare global {
   interface Window {
@@ -24,19 +25,28 @@ declare global {
   }
 }
 
-export async function initBackendConnection(): Promise<string> {
-  if (window.electronAPI) {
-    try {
-      const info = await window.electronAPI.getBackendInfo();
-      if (info && info.port) {
-        backendBaseUrl = `http://127.0.0.1:${info.port}`;
-        sessionToken = info.token || "";
+export async function ensureBackendConnected(): Promise<string> {
+  if (!backendInitPromise) {
+    backendInitPromise = (async () => {
+      if (typeof window !== "undefined" && window.electronAPI?.getBackendInfo) {
+        try {
+          const info = await window.electronAPI.getBackendInfo();
+          if (info && info.port) {
+            backendBaseUrl = `http://127.0.0.1:${info.port}`;
+            sessionToken = info.token || "";
+          }
+        } catch (e) {
+          console.warn("Could not retrieve backend config from Electron, using default:", e);
+        }
       }
-    } catch (e) {
-      console.warn("Could not retrieve backend config from Electron, using default:", e);
-    }
+      return backendBaseUrl;
+    })();
   }
-  return backendBaseUrl;
+  return backendInitPromise;
+}
+
+export async function initBackendConnection(): Promise<string> {
+  return ensureBackendConnected();
 }
 
 function getHeaders(): Record<string, string> {
@@ -50,12 +60,14 @@ function getHeaders(): Record<string, string> {
 }
 
 export async function checkBackendHealth(): Promise<{ status: string; has_api_key: boolean; selected_model: string }> {
+  await ensureBackendConnected();
   const res = await fetch(`${backendBaseUrl}/health`);
   if (!res.ok) throw new Error(`Health check failed: ${res.statusText}`);
   return res.json();
 }
 
 export async function fetchSettings(): Promise<AppSettings> {
+  await ensureBackendConnected();
   const res = await fetch(`${backendBaseUrl}/api/settings`, {
     headers: getHeaders(),
   });
@@ -78,6 +90,7 @@ export async function saveSettings(data: {
 }
 
 export async function inspectFiles(filePaths: string[]): Promise<InspectResult> {
+  await ensureBackendConnected();
   const res = await fetch(`${backendBaseUrl}/api/documents/inspect`, {
     method: "POST",
     headers: getHeaders(),
@@ -98,6 +111,7 @@ export async function enqueueDocumentTask(
   customInstructions?: string,
   url?: string
 ): Promise<TaskItem> {
+  await ensureBackendConnected();
   const res = await fetch(`${backendBaseUrl}/api/tasks`, {
     method: "POST",
     headers: getHeaders(),
@@ -118,6 +132,7 @@ export async function enqueueDocumentTask(
 }
 
 export async function fetchTasksHistory(): Promise<TaskItem[]> {
+  await ensureBackendConnected();
   const res = await fetch(`${backendBaseUrl}/api/tasks?limit=100`, {
     headers: getHeaders(),
   });
@@ -127,6 +142,7 @@ export async function fetchTasksHistory(): Promise<TaskItem[]> {
 }
 
 export async function cancelRunningTask(taskId: string): Promise<boolean> {
+  await ensureBackendConnected();
   const res = await fetch(`${backendBaseUrl}/api/tasks/${taskId}/cancel`, {
     method: "POST",
     headers: getHeaders(),
@@ -138,39 +154,58 @@ export function subscribeToQueueEvents(
   onEvent: (eventType: string, data: any) => void,
   onError?: (err: any) => void
 ): () => void {
-  const sseUrl = `${backendBaseUrl}/api/events${sessionToken ? `?token=${encodeURIComponent(sessionToken)}` : ""}`;
-  const eventSource = new EventSource(sseUrl);
+  let eventSource: EventSource | null = null;
+  let isClosed = false;
 
-  const eventTypes = [
-    "task_queued",
-    "task_processing",
-    "task_stage_changed",
-    "task_completed",
-    "task_failed",
-    "task_cancelled",
-  ];
+  const connect = async () => {
+    try {
+      await ensureBackendConnected();
+      if (isClosed) return;
 
-  eventTypes.forEach((evt) => {
-    eventSource.addEventListener(evt, (e: MessageEvent) => {
-      try {
-        const parsed = JSON.parse(e.data);
-        onEvent(evt, parsed);
-      } catch (err) {
-        console.error(`Failed to parse SSE event [${evt}]:`, err);
-      }
-    });
-  });
+      const sseUrl = `${backendBaseUrl}/api/events${sessionToken ? `?token=${encodeURIComponent(sessionToken)}` : ""}`;
+      eventSource = new EventSource(sseUrl);
 
-  eventSource.onerror = (err) => {
-    if (onError) onError(err);
+      const eventTypes = [
+        "task_queued",
+        "task_processing",
+        "task_stage_changed",
+        "task_completed",
+        "task_failed",
+        "task_cancelled",
+      ];
+
+      eventTypes.forEach((evt) => {
+        eventSource?.addEventListener(evt, (e: MessageEvent) => {
+          try {
+            const parsed = JSON.parse(e.data);
+            onEvent(evt, parsed);
+          } catch (err) {
+            console.error(`Failed to parse SSE event [${evt}]:`, err);
+          }
+        });
+      });
+
+      eventSource.onerror = (err) => {
+        if (onError) onError(err);
+      };
+    } catch (err) {
+      if (onError) onError(err);
+    }
   };
 
+  connect();
+
   return () => {
-    eventSource.close();
+    isClosed = true;
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
   };
 }
 
 export async function fetchPresets(): Promise<InstructionPreset[]> {
+  await ensureBackendConnected();
   const res = await fetch(`${backendBaseUrl}/api/presets`, {
     headers: getHeaders(),
   });
@@ -179,6 +214,7 @@ export async function fetchPresets(): Promise<InstructionPreset[]> {
 }
 
 export async function createPreset(title: string, instructions: string): Promise<InstructionPreset> {
+  await ensureBackendConnected();
   const res = await fetch(`${backendBaseUrl}/api/presets`, {
     method: "POST",
     headers: getHeaders(),
@@ -189,6 +225,7 @@ export async function createPreset(title: string, instructions: string): Promise
 }
 
 export async function updatePreset(id: string, title: string, instructions: string): Promise<InstructionPreset> {
+  await ensureBackendConnected();
   const res = await fetch(`${backendBaseUrl}/api/presets/${id}`, {
     method: "PUT",
     headers: getHeaders(),
@@ -199,6 +236,7 @@ export async function updatePreset(id: string, title: string, instructions: stri
 }
 
 export async function deletePreset(id: string): Promise<boolean> {
+  await ensureBackendConnected();
   const res = await fetch(`${backendBaseUrl}/api/presets/${id}`, {
     method: "DELETE",
     headers: getHeaders(),
@@ -207,6 +245,7 @@ export async function deletePreset(id: string): Promise<boolean> {
 }
 
 export async function resetPresets(): Promise<InstructionPreset[]> {
+  await ensureBackendConnected();
   const res = await fetch(`${backendBaseUrl}/api/presets/reset`, {
     method: "POST",
     headers: getHeaders(),

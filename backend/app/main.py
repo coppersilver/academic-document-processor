@@ -101,7 +101,7 @@ class CreateTaskRequest(BaseModel):
     filenames: list[str] = Field(default_factory=list)
     file_paths: list[str] = Field(default_factory=list)
     url: str | None = None
-    action_type: str = Field(..., description="summary, deadlines, key_terms, group_summary, calendar_export, bibtex, practice_exam, anonymize, polish, extract_article, youtube_transcript")
+    action_type: str = Field(..., description="summary, deadlines, key_terms, group_summary, calendar_export, bibtex, practice_exam, anonymize, polish, extract_article, youtube_transcript, syllabus_strategy")
     output_dir: str | None = None
     custom_instructions: str | None = None
 
@@ -205,6 +205,7 @@ async def create_task(req: CreateTaskRequest):
         "polish",
         "extract_article",
         "youtube_transcript",
+        "syllabus_strategy",
     }
     if action not in valid_actions:
         raise HTTPException(status_code=400, detail=f"Invalid action type: {req.action_type}")

@@ -5,6 +5,7 @@ from app.prompts.calendar_export import build_calendar_export_prompt
 from app.prompts.bibtex import build_bibtex_prompt
 from app.prompts.practice_exam import build_practice_exam_prompt
 from app.prompts.anonymize import build_anonymize_prompt
+from app.prompts.syllabus_strategy import build_syllabus_strategy_prompt
 from app.services.openrouter import get_action_messages
 
 def test_generate_ics_content():
@@ -69,9 +70,19 @@ def test_prompt_generators():
     assert len(p_anon) == 2
     assert "STUDENT NAME" in p_anon[1]["content"]
 
+    p_strat = build_syllabus_strategy_prompt(text, fn)
+    assert len(p_strat) == 2
+    assert "academic strategist" in p_strat[0]["content"].lower()
+    assert "Course Architecture & Intellectual Map" in p_strat[1]["content"]
+    assert "Assessment Breakdown & Grade Optimization ROI" in p_strat[1]["content"]
+    assert "Weekly Study Cadence & Active Learning Workflow" in p_strat[1]["content"]
+    assert "Subject-Specific Comprehension & Retention Blueprint" in p_strat[1]["content"]
+    assert "Milestone Exam & Deliverable Gameplan" in p_strat[1]["content"]
+    assert "Critical Bottlenecks, Risk Management & Grade Recovery" in p_strat[1]["content"]
+
 def test_get_action_messages_routing():
     text = "Academic text"
-    for action in ["calendar_export", "bibtex", "practice_exam", "anonymize"]:
+    for action in ["calendar_export", "bibtex", "practice_exam", "anonymize", "polish", "syllabus_strategy"]:
         msgs = get_action_messages(action, text, ["doc.pdf"])
         assert len(msgs) == 2
         assert msgs[0]["role"] == "system"
@@ -88,3 +99,50 @@ def test_get_action_messages_custom_instructions():
     assert len(msgs) == 2
     assert "ADDITIONAL USER INSTRUCTIONS & FOCUS" in msgs[1]["content"]
     assert "Focus specifically on Schrödinger equation derivations." in msgs[1]["content"]
+
+@pytest.mark.asyncio
+async def test_call_openrouter_embedded_error(monkeypatch):
+    from unittest.mock import AsyncMock, patch
+    from app.services.openrouter import call_openrouter, OpenRouterError
+    import httpx
+
+    # Mock response returning 200 OK with embedded error in body
+    mock_resp = httpx.Response(
+        status_code=200,
+        json={"error": {"message": "Provider rate limit reached", "code": 429}},
+        request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    )
+
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=mock_resp)):
+        with pytest.raises(OpenRouterError) as exc_info:
+            await call_openrouter(
+                messages=[{"role": "user", "content": "hi"}],
+                api_key="sk-test",
+                max_retries=2
+            )
+        assert "Provider rate limit reached" in str(exc_info.value)
+        assert not exc_info.value.is_terminal
+
+@pytest.mark.asyncio
+async def test_call_openrouter_empty_choices(monkeypatch):
+    from unittest.mock import AsyncMock, patch
+    from app.services.openrouter import call_openrouter, OpenRouterError
+    import httpx
+
+    # Mock response returning 200 OK with empty choices list
+    mock_resp = httpx.Response(
+        status_code=200,
+        json={"choices": []},
+        request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    )
+
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=mock_resp)):
+        with pytest.raises(OpenRouterError) as exc_info:
+            await call_openrouter(
+                messages=[{"role": "user", "content": "hi"}],
+                api_key="sk-test",
+                max_retries=2
+            )
+        assert "empty response with no choices" in str(exc_info.value)
+        assert not exc_info.value.is_terminal
+

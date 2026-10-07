@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
 import "katex/dist/katex.min.css";
+import mermaid from "mermaid";
 import {
   Copy,
   Check,
@@ -25,28 +26,56 @@ marked.use(
 );
 
 /**
- * Normalizes math delimiters in Markdown text so that multiline display equations
- * (e.g., \begin{aligned}...\end{aligned}) and LaTeX bracket notations (\[...\], \(...\))
- * conform to marked-katex-extension's block requirements.
+ * Normalizes math delimiters in Markdown text so that:
+ * 1. Multiline display equations and LaTeX bracket notations conform to marked-katex requirements.
+ * 2. Inline $$...$$ inside table rows or sentences are converted to $...$ to prevent splitting table cells.
+ * 3. Text inside fenced code blocks (```...```) is preserved untouched.
  */
 function normalizeMathDelimiters(markdown: string): string {
-  let res = markdown;
+  // Preserve fenced code blocks completely untouched so delimiters inside code are not corrupted
+  const parts = markdown.split(/(```[\s\S]*?```)/g);
 
-  // 1. Convert \[ ... \] to $$ ... $$ block math
-  res = res.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$\n${inner.trim()}\n$$`);
+  return parts
+    .map((part, idx) => {
+      // Odd indices are inside fenced code blocks (```...```)
+      if (idx % 2 === 1) return part;
 
-  // 2. Convert \( ... \) to $ ... $ inline math
-  res = res.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner.trim()}$`);
+      let res = part;
 
-  // 3. Ensure $$ blocks containing newlines or LaTeX environments have leading/trailing newlines
-  res = res.replace(/\$\$([\s\S]*?)\$\$/g, (match, inner) => {
-    if (inner.includes("\n") || inner.includes("\\begin{") || inner.includes("\\\\")) {
-      return `\n\n$$\n${inner.trim()}\n$$\n\n`;
-    }
-    return match;
-  });
+      // 1. Convert \[ ... \] to $$ ... $$ block math
+      res = res.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$\n${inner.trim()}\n$$`);
 
-  return res;
+      // 2. Convert \( ... \) to $ ... $ inline math
+      res = res.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner.trim()}$`);
+
+      // 3. Convert single-line $$...$$ in table rows (| ... |) or inline in sentences to $...$
+      // This prevents KaTeX displayMode block math from splitting table cells or paragraphs
+      res = res
+        .split("\n")
+        .map((line) => {
+          if (line.includes("|") && line.includes("$$")) {
+            return line.replace(/\$\$([^\n$]+?)\$\$/g, (_, inner) => `$${inner.trim()}$`);
+          }
+          return line.replace(/(^|[^\n])\$\$([^\n$]+?)\$\$([^\n]|$)/g, (match, prefix, inner, suffix) => {
+            if (prefix.trim() || suffix.trim()) {
+              return `${prefix}$${inner.trim()}$${suffix}`;
+            }
+            return match;
+          });
+        })
+        .join("\n");
+
+      // 4. Ensure standalone $$ blocks containing newlines or LaTeX environments have leading/trailing newlines
+      res = res.replace(/\$\$([\s\S]*?)\$\$/g, (match, inner) => {
+        if (inner.includes("\n") || inner.includes("\\begin{") || inner.includes("\\\\")) {
+          return `\n\n$$\n${inner.trim()}\n$$\n\n`;
+        }
+        return match;
+      });
+
+      return res;
+    })
+    .join("");
 }
 
 /**
@@ -253,8 +282,8 @@ export const MarkdownPreviewWindow: React.FC = () => {
           const content = await window.electronAPI.readFileContent(targetPath);
           if (content !== null) {
             setRawContent(content);
-            const normalized = normalizeMathDelimiters(content);
-            const html = await marked.parse(normalized);
+            const isDark = document.documentElement.classList.contains("dark");
+            const html = await renderMarkdownWithDiagrams(content, isDark);
             setRenderedHtml(html);
           } else {
             setError(`Could not read file at: ${targetPath}`);
@@ -278,6 +307,89 @@ export const MarkdownPreviewWindow: React.FC = () => {
 
     loadContent();
   }, []);
+
+/**
+ * Renders Markdown content with full KaTeX math support and Mermaid diagrams.
+ * Pre-processes all ```mermaid ... ``` fenced code blocks directly into SVG markup
+ * via mermaid.render before marked parsing, avoiding React DOM race conditions.
+ */
+async function renderMarkdownWithDiagrams(content: string, isDark: boolean): Promise<string> {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: isDark ? "dark" : "default",
+    securityLevel: "loose",
+    fontFamily: "ui-sans-serif, system-ui, sans-serif",
+  });
+
+  // 1. Identify and extract all ```mermaid ... ``` code blocks
+  const mermaidBlocks: { placeholder: string; svgOrHtml: string }[] = [];
+  let blockIndex = 0;
+
+  // We look for ```mermaid ... ``` code blocks
+  const preprocessedMarkdown = await (async () => {
+    // Regex matching fenced mermaid code blocks: ```mermaid\n...\n```
+    const mermaidRegex = /```mermaid[ \t]*\r?\n([\s\S]*?)```/g;
+    const matches: { fullMatch: string; code: string; index: number }[] = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = mermaidRegex.exec(content)) !== null) {
+      matches.push({
+        fullMatch: match[0],
+        code: match[1].trim(),
+        index: match.index,
+      });
+    }
+
+    if (matches.length === 0) {
+      return content;
+    }
+
+    let result = "";
+    let lastIndex = 0;
+
+    for (const item of matches) {
+      result += content.substring(lastIndex, item.index);
+      const placeholder = `<!--MERMAID_DIAGRAM_PLACEHOLDER_${blockIndex++}-->`;
+      const uniqueId = `mermaid-${Date.now()}-${blockIndex}-${Math.random().toString(36).substring(2, 7)}`;
+
+      let diagramHtml = "";
+      try {
+        const { svg } = await mermaid.render(uniqueId, item.code);
+        diagramHtml = `<div class="mermaid">${svg}</div>`;
+      } catch (err: any) {
+        console.warn("Mermaid render error:", err);
+        const escapedCode = item.code.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        diagramHtml = `
+          <div class="mermaid-error my-4 p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs">
+            <div class="flex items-center space-x-2 text-rose-600 dark:text-rose-400 font-semibold mb-2">
+              <span>Mermaid Diagram Syntax Error:</span>
+              <span class="font-mono text-[11px] font-normal">${err.message || String(err)}</span>
+            </div>
+            <pre class="font-mono text-[11px] p-2.5 rounded bg-white dark:bg-slate-900 border border-rose-100 dark:border-rose-950 text-slate-700 dark:text-slate-300 overflow-x-auto whitespace-pre">${escapedCode}</pre>
+          </div>
+        `;
+      }
+
+      mermaidBlocks.push({ placeholder, svgOrHtml: diagramHtml });
+      result += placeholder;
+      lastIndex = item.index + item.fullMatch.length;
+    }
+
+    result += content.substring(lastIndex);
+    return result;
+  })();
+
+  // 2. Normalize math delimiters and parse Markdown via marked + KaTeX
+  const normalized = normalizeMathDelimiters(preprocessedMarkdown);
+  let parsedHtml = await marked.parse(normalized);
+
+  // 3. Replace diagram placeholders with their rendered SVGs
+  for (const block of mermaidBlocks) {
+    parsedHtml = parsedHtml.replace(block.placeholder, block.svgOrHtml);
+  }
+
+  return parsedHtml;
+}
 
   // Handle keyboard shortcut: Cmd+F or Ctrl+F to open search, Escape to close
   useEffect(() => {

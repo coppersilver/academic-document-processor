@@ -181,3 +181,47 @@ mark.search-result-active {
   border-radius: 2px;
 }
 
+/* GFM Task List Checkboxes */
+.markdown-body input[type="checkbox"] {
+  appearance: checkbox !important;
+  -webkit-appearance: checkbox !important;
+  width: 1rem;
+  height: 1rem;
+  margin-right: 0.5rem;
+  margin-top: 0.15rem;
+  vertical-align: middle;
+  cursor: default;
+  accent-color: #6366f1;
+}
+.markdown-body ul:has(input[type="checkbox"]) {
+  list-style-type: none;
+  padding-left: 0.25rem;
+}
+.markdown-body li:has(> input[type="checkbox"]) {
+  list-style-type: none;
+  display: flex;
+  align-items: flex-start;
+}
+
+/* Mermaid Diagram Styling */
+.markdown-body .mermaid {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+}
+.dark .markdown-body .mermaid {
+  background-color: #0f172a;
+  border-color: #334155;
+}
+.markdown-body .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+
